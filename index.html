@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Digital Polaroid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none; /* Prevents long-press popup on iOS */
+            touch-action: none; /* Prevents mobile browser swipe navigation */
+        }
+
+        /* The Infinite Studio Desk */
+        #workspace {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            cursor: grab;
+            background-color: #f5f2eb;
+            background-image: radial-gradient(#d5d2cb 1.5px, transparent 1.5px);
+            background-size: 30px 30px;
+            background-position: 0px 0px;
+        }
+
+        #workspace:active {
+            cursor: grabbing;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 0;
+            overflow: visible;
+            will-change: transform;
+            transform-origin: 0 0;
+        }
+
+        /* Camera Skeuomorphism */
+        .camera-body {
+            background: linear-gradient(135deg, #a8d5e5 0%, #87b8cd 100%);
+            box-shadow: 
+                0 2px 4px rgba(0,0,0,0.6),
+                0 12px 24px rgba(0,0,0,0.3),
+                inset 0 10px 20px rgba(255,255,255,0.6),
+                inset 0 -10px 20px rgba(0,0,0,0.2),
+                inset -10px 0 20px rgba(0,0,0,0.1);
+            cursor: grab;
+        }
+
+        .camera-body:active {
+            cursor: grabbing;
+        }
+
+        .lens-housing {
+            background: #e0e5ec;
+            box-shadow: 
+                0 15px 30px rgba(0,0,0,0.3),
+                inset 0 5px 10px rgba(255,255,255,0.8),
+                inset 0 -5px 10px rgba(0,0,0,0.1);
+        }
+
+        .lens-inner {
+            box-shadow: inset 0 10px 30px rgba(0,0,0,0.9);
+        }
+
+        .rainbow-stripe {
+            background: linear-gradient(to bottom, #e73c3e 0%, #e73c3e 20%, #f48225 20%, #f48225 40%, #f5c400 40%, #f5c400 60%, #41a054 60%, #41a054 80%, #0076c0 80%, #0076c0 100%);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .shutter-btn {
+            background: radial-gradient(circle at 30% 30%, #ff5252, #d50000);
+            box-shadow: 
+                0 6px 12px rgba(0,0,0,0.4),
+                inset 0 2px 4px rgba(255,255,255,0.5);
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .shutter-btn:active {
+            transform: translateY(4px) scale(0.95);
+            box-shadow: 
+                0 2px 4px rgba(0,0,0,0.4),
+                inset 0 2px 4px rgba(255,255,255,0.5);
+        }
+
+        .flash-glass {
+            background: repeating-linear-gradient(
+                90deg,
+                rgba(255, 255, 255, 0.1),
+                rgba(255, 255, 255, 0.1) 2px,
+                rgba(0, 0, 0, 0.1) 2px,
+                rgba(0, 0, 0, 0.1) 4px
+            ), linear-gradient(to bottom, #f0f0f0, #d0d0d0);
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.3);
+            transition: all 0.1s ease;
+        }
+
+        .flash-active {
+            background: #ffffff !important;
+            box-shadow: 0 0 50px 20px rgba(255, 255, 255, 0.9), inset 0 0 20px rgba(255,255,255,1) !important;
+        }
+
+        /* Animations */
+        @keyframes recoil {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            15% { transform: translate(-50%, -50%) scale(0.97) translateY(-8px) rotate(-1deg); }
+            30% { transform: translate(-50%, -50%) scale(1.01) translateY(2px) rotate(0.5deg); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .anim-recoil {
+            animation: recoil 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        @keyframes jitter {
+            0% { transform: translateX(0) rotate(0); }
+            25% { transform: translateX(-0.5px) rotate(-0.2deg); }
+            50% { transform: translateX(0.5px) rotate(0.2deg); }
+            75% { transform: translateX(-0.5px) rotate(0); }
+            100% { transform: translateX(0) rotate(0); }
+        }
+
+        .anim-jitter {
+            animation: jitter 0.08s infinite;
+        }
+
+        @keyframes eject {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(10px); }
+        }
+
+        .anim-eject {
+            animation: eject 4s cubic-bezier(0.3, 1, 0.6, 1) forwards;
+        }
+
+        /* Photo Styles */
+        .polaroid {
+            background-color: #fafafa;
+            padding: 12px 12px 60px 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2), inset 0 1px 3px rgba(255,255,255,0.8);
+            position: absolute;
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            width: 240px;
+            border-radius: 2px;
+            will-change: transform;
+            touch-action: none;
+        }
+
+        .polaroid:active {
+            cursor: grabbing;
+        }
+
+        .photo-frame {
+            width: 216px;
+            height: 216px;
+            background: #000;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .photo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* Initial undeveloped state for all photos */
+            filter: brightness(0.1) contrast(0.5) sepia(0.8) blur(10px);
+            opacity: 0.8;
+            transition: filter 14s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 14s ease;
+            pointer-events: none;
+        }
+
+        /* Specific Developed States based on FX Dial */
+        .photo-img.effect-classic.developed {
+            filter: brightness(1.05) contrast(1.1) sepia(0.15) blur(0px);
+            opacity: 1;
+        }
+
+        .photo-img.effect-bw.developed {
+            filter: grayscale(1) contrast(1.3) brightness(1.1) blur(0px);
+            opacity: 1;
+        }
+
+        .photo-img.effect-vintage.developed {
+            filter: sepia(0.8) contrast(1.2) brightness(0.8) blur(0px);
+            opacity: 1;
+        }
+
+        .photo-img.effect-cool.developed {
+            filter: sepia(1) hue-rotate(180deg) contrast(1.2) brightness(0.9) blur(0px);
+            opacity: 1;
+        }
+
+        .marker-font {
+            font-family: 'Permanent Marker', cursive;
+            background: transparent;
+            border: none;
+            outline: none;
+            text-align: center;
+            width: 100%;
+            position: absolute;
+            bottom: 15px;
+            left: 0;
+            font-size: 1.2rem;
+            color: #2c3e50;
+            transform: rotate(-2deg);
+            opacity: 0.8;
+        }
+
+        .marker-font:focus {
+            opacity: 1;
+        }
+
+        /* Hidden Canvas for processing */
+        #capture-canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Infinite Workspace -->
+    <div id="workspace">
+        <div id="canvas">
+            
+            <!-- Fixed Camera UI Container (Now living on the canvas desk) -->
+            <div id="camera-wrapper" class="absolute z-40 pointer-events-none">
+                
+                <!-- The Camera Body -->
+                <div id="camera" class="camera-body relative w-[22rem] h-[26rem] rounded-[2.5rem] border border-[#71a3b8] pointer-events-auto">
+                    
+                    <!-- Rainbow Stripe -->
+                    <div class="rainbow-stripe absolute top-0 bottom-12 left-1/2 transform -translate-x-1/2 w-8 opacity-90 z-0"></div>
+
+                    <!-- Viewfinder -->
+                    <div class="absolute top-8 right-8 w-14 h-14 bg-gray-900 rounded-lg shadow-[inset_0_4px_8px_rgba(0,0,0,0.8)] border-2 border-[#5a8a9e] z-10">
+                        <div class="w-full h-full border-[3px] border-black rounded-md flex items-center justify-center">
+                            <div class="w-8 h-8 border border-white opacity-20"></div>
+                        </div>
+                    </div>
+
+                    <!-- Flash Bulb -->
+                    <div id="flash-bulb" class="flash-glass absolute top-8 left-8 w-20 h-12 rounded-lg border-2 border-[#5a8a9e] z-10"></div>
+
+                    <!-- Main Lens Housing -->
+                    <div class="lens-housing absolute top-[55%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full flex items-center justify-center z-20">
+                        <!-- Inner Lens Frame -->
+                        <div class="lens-inner w-40 h-40 bg-gray-800 rounded-full border-4 border-gray-600 flex items-center justify-center overflow-hidden relative">
+                            <!-- Glass glare effect -->
+                            <div class="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] bg-gradient-to-br from-white/20 to-transparent rotate-45 pointer-events-none z-10"></div>
+                            <video id="video-feed" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                        </div>
+                        <!-- Surrounding ring details -->
+                        <div class="absolute w-46 h-46 rounded-full border border-gray-400 opacity-50 pointer-events-none"></div>
+                    </div>
+
+                    <!-- Shutter Button -->
+                    <div id="shutter-btn" class="shutter-btn absolute top-1/2 right-6 transform -translate-y-1/2 w-10 h-10 rounded-full cursor-pointer z-30"></div>
+                    
+                    <!-- Effect Selection Dial -->
+                    <div class="absolute bottom-16 left-8 flex flex-col items-center gap-2 z-30">
+                        <div id="effect-dial" class="w-14 h-14 rounded-full bg-gray-700 shadow-[0_4px_8px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.3)] border-2 border-[#5a8a9e] cursor-pointer flex items-center justify-center transition-transform duration-300 ease-in-out relative">
+                            <!-- Ridges -->
+                            <div class="absolute inset-0 rounded-full bg-[repeating-conic-gradient(#4b5563_0_10deg,#374151_10deg_20deg)] opacity-50 mix-blend-overlay pointer-events-none"></div>
+                            <!-- Inner face -->
+                            <div class="w-10 h-10 rounded-full bg-[#1f2937] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] relative pointer-events-none">
+                                <!-- Indicator dot -->
+                                <div class="absolute top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.8)]"></div>
+                            </div>
+                        </div>
+                        <div class="text-white font-bold tracking-widest opacity-70 text-[10px] mix-blend-overlay" id="effect-label">CLASSIC</div>
+                    </div>
+
+                    <!-- Polaroid Branding Text -->
+                    <div class="absolute bottom-16 right-8 text-white font-bold tracking-widest opacity-70 text-sm z-10 mix-blend-overlay">Praks</div>
+
+                    <!-- Print Slot Lip -->
+                    <div class="absolute -bottom-6 left-1/2 transform -translate-x-1/2 w-72 h-14 bg-[#1f2937] rounded-b-[2rem] shadow-[0_6px_10px_rgba(0,0,0,0.5)] z-30 flex justify-center items-end pb-3">
+                        <!-- The actual slit -->
+                        <div class="w-64 h-2.5 bg-black rounded-full shadow-[inset_0_3px_6px_rgba(0,0,0,1)]"></div>
+                    </div>
+
+                </div>
+
+                <!-- Ejection Area (hidden overflow container below the slot) -->
+                <div id="eject-area" class="absolute top-[calc(100%-1.5rem)] left-1/2 transform -translate-x-1/2 w-64 h-[22rem] overflow-hidden pointer-events-none z-20">
+                </div>
+
+            </div>
+
+            <!-- Rendered photos will be dropped here -->
+        </div>
+    </div>
+
+    <!-- Screen Flash Overlay -->
+    <div id="screen-flash" class="fixed inset-0 bg-white opacity-0 pointer-events-none z-50 transition-opacity duration-500"></div>
+
+    <!-- Download All Button (Responsive for Mobile) -->
+    <button id="download-all-btn" class="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-[#1f2937] text-white px-4 py-3 sm:px-5 sm:py-3 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.3)] border border-[#5a8a9e] hover:bg-gray-700 transition-all active:scale-95 flex items-center gap-2 font-bold text-[10px] sm:text-sm tracking-wider cursor-pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="w-4 h-4">
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+          <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+        </svg>
+        <span id="btn-text">DOWNLOAD</span>
+    </button>
+
+    <!-- Hidden Canvas for capturing frames -->
+    <canvas id="capture-canvas" width="600" height="600"></canvas>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            panX: 0,
+            panY: 0,
+            scale: 1, // Added responsive global scaling
+            isDraggingCanvas: false,
+            isDraggingCamera: false,
+            activePhoto: null,
+            dragStartX: 0,
+            dragStartY: 0,
+            highestZ: 40,
+            isPrinting: false,
+            // New Effect State
+            effects: [
+                { name: 'CLASSIC', class: 'effect-classic' },
+                { name: 'NOIR', class: 'effect-bw' },
+                { name: 'VINTAGE', class: 'effect-vintage' },
+                { name: 'CYAN', class: 'effect-cool' }
+            ],
+            currentEffectIndex: 0
+        };
+
+        // --- DOM Elements ---
+        const elements = {
+            workspace: document.getElementById('workspace'),
+            canvas: document.getElementById('canvas'),
+            cameraWrapper: document.getElementById('camera-wrapper'),
+            camera: document.getElementById('camera'),
+            video: document.getElementById('video-feed'),
+            shutterBtn: document.getElementById('shutter-btn'),
+            flashBulb: document.getElementById('flash-bulb'),
+            screenFlash: document.getElementById('screen-flash'),
+            ejectArea: document.getElementById('eject-area'),
+            captureCanvas: document.getElementById('capture-canvas'),
+            effectDial: document.getElementById('effect-dial'),
+            effectLabel: document.getElementById('effect-label'),
+            downloadBtn: document.getElementById('download-all-btn')
+        };
+
+        // --- Web Audio API Synth (No External Assets) ---
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playShutterSound() {
+            initAudio();
+            const time = audioCtx.currentTime;
+
+            // --- 1. KA-CHUNK (Shutter & Mirror) ---
+            const snapBufferSize = audioCtx.sampleRate * 0.05; // 50ms
+            const snapBuffer = audioCtx.createBuffer(1, snapBufferSize, audioCtx.sampleRate);
+            const snapData = snapBuffer.getChannelData(0);
+            for (let i = 0; i < snapBufferSize; i++) {
+                snapData[i] = Math.random() * 2 - 1;
+            }
+            const snapNoise = audioCtx.createBufferSource();
+            snapNoise.buffer = snapBuffer;
+
+            const snapFilter = audioCtx.createBiquadFilter();
+            snapFilter.type = 'highpass';
+            snapFilter.frequency.value = 1500; // Crisp frequencies only
+
+            const snapGain = audioCtx.createGain();
+            snapGain.gain.setValueAtTime(2, time);
+            snapGain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+            snapNoise.connect(snapFilter);
+            snapFilter.connect(snapGain);
+            snapGain.connect(audioCtx.destination);
+            snapNoise.start(time);
+
+            // The "CHUNK" (Mechanical thud of the mechanism)
+            const thudOsc = audioCtx.createOscillator();
+            thudOsc.type = 'square';
+            thudOsc.frequency.setValueAtTime(150, time);
+            thudOsc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+
+            const thudGain = audioCtx.createGain();
+            thudGain.gain.setValueAtTime(1, time);
+            thudGain.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
+
+            thudOsc.connect(thudGain);
+            thudGain.connect(audioCtx.destination);
+            thudOsc.start(time);
+            thudOsc.stop(time + 0.08);
+
+            // --- 2. THE WHIR (Motor ejecting the film) ---
+            setTimeout(() => {
+                const motorTime = audioCtx.currentTime;
+                
+                // Gear whining (Sawtooth wave)
+                const whirOsc = audioCtx.createOscillator();
+                whirOsc.type = 'sawtooth';
+                
+                // Motor spinning up, holding, then spinning down
+                whirOsc.frequency.setValueAtTime(100, motorTime);
+                whirOsc.frequency.linearRampToValueAtTime(160, motorTime + 0.2);
+                whirOsc.frequency.setValueAtTime(160, motorTime + 3.8);
+                whirOsc.frequency.linearRampToValueAtTime(80, motorTime + 4.2);
+
+                const whirGain = audioCtx.createGain();
+                whirGain.gain.setValueAtTime(0, motorTime);
+                whirGain.gain.linearRampToValueAtTime(0.12, motorTime + 0.2);
+                whirGain.gain.setValueAtTime(0.12, motorTime + 3.8);
+                whirGain.gain.linearRampToValueAtTime(0, motorTime + 4.2);
+
+                whirOsc.connect(whirGain);
+                whirGain.connect(audioCtx.destination);
+                whirOsc.start(motorTime);
+                whirOsc.stop(motorTime + 4.2);
+
+                // Grinding noise (Lowpass filtered static)
+                const grindBufferSize = audioCtx.sampleRate * 4.2;
+                const grindBuffer = audioCtx.createBuffer(1, grindBufferSize, audioCtx.sampleRate);
+                const grindData = grindBuffer.getChannelData(0);
+                for (let i = 0; i < grindBufferSize; i++) {
+                    grindData[i] = Math.random() * 2 - 1;
+                }
+                const grindNoise = audioCtx.createBufferSource();
+                grindNoise.buffer = grindBuffer;
+
+                const grindFilter = audioCtx.createBiquadFilter();
+                grindFilter.type = 'lowpass';
+                grindFilter.frequency.setValueAtTime(600, motorTime);
+                
+                const grindGain = audioCtx.createGain();
+                grindGain.gain.setValueAtTime(0, motorTime);
+                grindGain.gain.linearRampToValueAtTime(0.5, motorTime + 0.2);
+                grindGain.gain.setValueAtTime(0.5, motorTime + 3.8);
+                grindGain.gain.linearRampToValueAtTime(0, motorTime + 4.2);
+
+                grindNoise.connect(grindFilter);
+                grindFilter.connect(grindGain);
+                grindGain.connect(audioCtx.destination);
+                
+                grindNoise.start(motorTime);
+            }, 100);
+        }
+
+        // --- Mechanical Dial Click Sound ---
+        function playDialClick() {
+            initAudio();
+            const time = audioCtx.currentTime;
+            
+            const osc = audioCtx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(800, time);
+            osc.frequency.exponentialRampToValueAtTime(100, time + 0.05);
+            
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.3, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start(time);
+            osc.stop(time + 0.05);
+        }
+
+        // --- Webcam Setup ---
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1080 } }, 
+                    audio: false 
+                });
+                elements.video.srcObject = stream;
+            } catch (err) {
+                console.error("Camera access denied or unavailable:", err);
+                // Fallback styling if no camera
+                elements.video.style.backgroundColor = "#2c3e50";
+            }
+        }
+
+        // --- Infinite Canvas Dragging ---
+        elements.workspace.addEventListener('pointerdown', (e) => {
+            // Ignore if clicking on camera, photo, or input
+            if (e.target.closest('#camera') || e.target.closest('.polaroid') || e.target.tagName.toLowerCase() === 'input') return;
+            
+            initAudio(); // Initialize audio context on first interaction
+            state.isDraggingCanvas = true;
+            state.dragStartX = e.clientX - state.panX;
+            state.dragStartY = e.clientY - state.panY;
+        });
+
+        // --- Effect Dial Logic ---
+        elements.effectDial.addEventListener('pointerdown', (e) => {
+            e.stopPropagation(); // Prevent camera/canvas dragging
+            
+            // Increment effect index and wrap around
+            state.currentEffectIndex = (state.currentEffectIndex + 1) % state.effects.length;
+            const currentEffect = state.effects[state.currentEffectIndex];
+            
+            // Rotate the physical dial visually (90 degrees per effect)
+            const rotation = state.currentEffectIndex * 90;
+            elements.effectDial.style.transform = `rotate(${rotation}deg)`;
+            
+            // Update Label
+            elements.effectLabel.innerText = currentEffect.name;
+            
+            // Play mechanical feedback
+            playDialClick();
+        });
+
+        // --- Camera Dragging Logic ---
+        elements.camera.addEventListener('pointerdown', (e) => {
+            // Ignore shutter button and dial clicks
+            if (e.target.closest('#shutter-btn') || e.target.closest('#effect-dial')) return; 
+            
+            e.stopPropagation(); // Prevent canvas dragging
+            state.isDraggingCamera = true;
+            
+            state.highestZ++;
+            elements.cameraWrapper.style.zIndex = state.highestZ;
+            
+            const currentX = parseFloat(elements.cameraWrapper.dataset.x) || 0;
+            
+            // Adjust pointer calculations using global scale
+            state.dragStartX = ((e.clientX - state.panX) / state.scale) - currentX;
+            state.dragStartY = ((e.clientY - state.panY) / state.scale) - (parseFloat(elements.cameraWrapper.dataset.y) || 0);
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (state.isDraggingCanvas) {
+                state.panX = e.clientX - state.dragStartX;
+                state.panY = e.clientY - state.dragStartY;
+                updateCanvasTransform();
+            }
+
+            if (state.isDraggingCamera) {
+                const x = ((e.clientX - state.panX) / state.scale) - state.dragStartX;
+                const y = ((e.clientY - state.panY) / state.scale) - state.dragStartY;
+                elements.cameraWrapper.style.transform = `translate(${x}px, ${y}px)`;
+                elements.cameraWrapper.dataset.x = x;
+                elements.cameraWrapper.dataset.y = y;
+            }
+
+            if (state.activePhoto) {
+                const photo = state.activePhoto;
+                const x = ((e.clientX - state.panX) / state.scale) - state.dragStartX;
+                const y = ((e.clientY - state.panY) / state.scale) - state.dragStartY;
+                photo.style.transform = `translate(${x}px, ${y}px) rotate(${photo.dataset.rotation}deg)`;
+                photo.dataset.x = x;
+                photo.dataset.y = y;
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            state.isDraggingCanvas = false;
+            state.isDraggingCamera = false;
+            if (state.activePhoto) {
+                state.activePhoto.style.cursor = 'grab';
+                state.activePhoto = null;
+            }
+        });
+
+        function updateCanvasTransform() {
+            elements.canvas.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+            elements.workspace.style.backgroundPosition = `${state.panX}px ${state.panY}px`;
+        }
+
+        // --- Download Feature ---
+        elements.downloadBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            
+            const textSpan = document.getElementById('btn-text');
+            const originalText = textSpan.innerText;
+            
+            const polaroids = document.querySelectorAll('#canvas .polaroid');
+            if (polaroids.length === 0) {
+                textSpan.innerText = 'NO PHOTOS!';
+                setTimeout(() => textSpan.innerText = originalText, 2000);
+                return;
+            }
+
+            textSpan.innerText = 'WAIT...';
+
+            for (let i = 0; i < polaroids.length; i++) {
+                const polaroid = polaroids[i];
+                const imgEl = polaroid.querySelector('.photo-img');
+                const inputEl = polaroid.querySelector('.marker-font');
+                const caption = inputEl.value || '';
+                
+                // Map the CSS effect to an actual canvas filter for export
+                let filter = 'none';
+                if (imgEl.classList.contains('effect-classic')) filter = 'brightness(1.05) contrast(1.1) sepia(0.15)';
+                else if (imgEl.classList.contains('effect-bw')) filter = 'grayscale(1) contrast(1.3) brightness(1.1)';
+                else if (imgEl.classList.contains('effect-vintage')) filter = 'sepia(0.8) contrast(1.2) brightness(0.8)';
+                else if (imgEl.classList.contains('effect-cool')) filter = 'sepia(1) hue-rotate(180deg) contrast(1.2) brightness(0.9)';
+
+                // Create a high-res offscreen canvas to render the physical Polaroid
+                const exportCanvas = document.createElement('canvas');
+                const scale = 3; // 3x resolution for high-quality export
+                exportCanvas.width = 240 * scale;
+                exportCanvas.height = 288 * scale;
+                const ctx = exportCanvas.getContext('2d');
+
+                // 1. Draw Paper Background
+                ctx.fillStyle = '#fafafa';
+                ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+                // 2. Draw Black Inner Frame
+                ctx.fillStyle = '#000';
+                ctx.fillRect(12 * scale, 12 * scale, 216 * scale, 216 * scale);
+
+                // 3. Draw Captured Image with its Filter
+                ctx.filter = filter;
+                ctx.drawImage(imgEl, 12 * scale, 12 * scale, 216 * scale, 216 * scale);
+                ctx.filter = 'none';
+
+                // 4. Draw Marker Caption
+                if (caption) {
+                    ctx.save();
+                    ctx.translate(exportCanvas.width / 2, 255 * scale); // Center of text area
+                    ctx.rotate(-2 * Math.PI / 180); // Match the CSS rotation (-2deg)
+                    ctx.font = `${19.2 * scale}px 'Permanent Marker', cursive`; // 1.2rem roughly 19.2px
+                    ctx.fillStyle = '#2c3e50';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(caption, 0, 0);
+                    ctx.restore();
+                }
+
+                // 5. Trigger File Download
+                const dataUrl = exportCanvas.toDataURL('image/jpeg', 0.9);
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `Praks_Polaroid_${i + 1}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // Add a small delay between downloads to prevent the browser from blocking multiple files
+                await new Promise(res => setTimeout(res, 400));
+            }
+            
+            textSpan.innerText = 'DONE!';
+            setTimeout(() => textSpan.innerText = originalText, 2000);
+        });
+
+        // --- Photo Dragging Logic ---
+        function attachPhotoDrag(photoEl) {
+            photoEl.addEventListener('pointerdown', (e) => {
+                if (e.target.tagName.toLowerCase() === 'input') {
+                    e.stopPropagation();
+                    return; // Let inputs be typed into normally
+                }
+                e.stopPropagation(); // Prevent canvas drag
+                
+                state.highestZ++;
+                photoEl.style.zIndex = state.highestZ;
+                photoEl.style.cursor = 'grabbing';
+                
+                state.activePhoto = photoEl;
+                
+                const currentX = parseFloat(photoEl.dataset.x) || 0;
+                
+                state.dragStartX = ((e.clientX - state.panX) / state.scale) - currentX;
+                state.dragStartY = ((e.clientY - state.panY) / state.scale) - (parseFloat(photoEl.dataset.y) || 0);
+            });
+        }
+
+        // --- Capture & Eject Sequence ---
+        elements.shutterBtn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (state.isPrinting) return;
+            state.isPrinting = true;
+            initAudio();
+
+            // Store the active effect class AT THE TIME OF CAPTURE
+            const activeEffectClass = state.effects[state.currentEffectIndex].class;
+
+            // 1. Capture the image frame
+            const ctx = elements.captureCanvas.getContext('2d');
+            const video = elements.video;
+            
+            // Calculate a square crop from the center of the video feed
+            const size = Math.min(video.videoWidth, video.videoHeight);
+            const xOffset = (video.videoWidth - size) / 2;
+            const yOffset = (video.videoHeight - size) / 2;
+            
+            ctx.drawImage(video, xOffset, yOffset, size, size, 0, 0, 600, 600);
+            const imageDataUrl = elements.captureCanvas.toDataURL('image/jpeg', 0.8);
+
+            // 2. Trigger Flash & Sounds
+            playShutterSound();
+            
+            // Screen Flash
+            elements.screenFlash.style.transitionDuration = '0.05s';
+            elements.screenFlash.style.opacity = '1';
+            
+            // Camera Flash Bulb Glow
+            elements.flashBulb.classList.add('flash-active');
+
+            // Recover from flash
+            setTimeout(() => {
+                elements.screenFlash.style.transitionDuration = '0.8s';
+                elements.screenFlash.style.opacity = '0';
+                elements.flashBulb.classList.remove('flash-active');
+            }, 50);
+
+            // 3. Eject Animation (after small mechanical delay)
+            setTimeout(() => {
+                startEjection(imageDataUrl, activeEffectClass);
+            }, 200);
+        });
+
+        function createPhotoElement(imgSrc, effectClass, includeJitter = false) {
+            const photo = document.createElement('div');
+            photo.className = 'polaroid shadow-xl';
+            if (includeJitter) photo.classList.add('anim-jitter');
+            
+            const frame = document.createElement('div');
+            frame.className = 'photo-frame';
+            
+            const img = document.createElement('img');
+            // Apply the base class AND the specific effect class
+            img.className = `photo-img ${effectClass}`;
+            img.src = imgSrc;
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'marker-font';
+            input.placeholder = 'Write a caption...';
+            input.maxLength = 20;
+            
+            frame.appendChild(img);
+            photo.appendChild(frame);
+            photo.appendChild(input);
+            
+            return { photo, img };
+        }
+
+        function startEjection(imgSrc, activeEffectClass) {
+            elements.ejectArea.innerHTML = '';
+            
+            const ejectContainer = document.createElement('div');
+            ejectContainer.className = 'absolute top-0 left-1/2 w-[240px] -ml-[120px] anim-eject';
+            
+            const { photo: tempPhoto } = createPhotoElement(imgSrc, activeEffectClass, true);
+            tempPhoto.style.position = 'relative'; 
+            
+            ejectContainer.appendChild(tempPhoto);
+            elements.ejectArea.appendChild(ejectContainer);
+
+            // Wait for 4s ejection to complete
+            setTimeout(() => {
+                handoffPhotoToCanvas(tempPhoto, imgSrc, ejectContainer, activeEffectClass);
+                state.isPrinting = false;
+            }, 4000);
+        }
+
+        function handoffPhotoToCanvas(tempPhoto, imgSrc, ejectContainer, activeEffectClass) {
+            // 1. Calculate physical screen position of the ejected photo
+            const rect = tempPhoto.getBoundingClientRect();
+            
+            // 2. Clear ejection slot
+            ejectContainer.remove();
+
+            // 3. Create permanent canvas photo
+            const { photo, img } = createPhotoElement(imgSrc, activeEffectClass, false);
+            
+            // Convert screen coordinates to local canvas coordinates (accounting for pan & dynamic scale)
+            const targetX = (rect.left - state.panX) / state.scale;
+            const targetY = (rect.top - state.panY) / state.scale;
+            
+            // Add a slight random rotation for natural feel
+            const rotation = (Math.random() * 6) - 3;
+            
+            photo.dataset.x = targetX;
+            photo.dataset.y = targetY;
+            photo.dataset.rotation = rotation;
+            
+            photo.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${rotation}deg)`;
+            
+            state.highestZ++;
+            photo.style.zIndex = state.highestZ;
+            
+            // Attach interactions
+            attachPhotoDrag(photo);
+            elements.canvas.appendChild(photo);
+
+            // 4. Trigger Chemical Development Effect
+            // Request animation frame ensures the DOM is updated before transitioning
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    img.classList.add('developed');
+                }, 100); // slight delay to ensure transition triggers
+            });
+        }
+
+        // --- Initialization ---
+        function initLayout() {
+            // Dynamically scale down for screens smaller than 450px width
+            if (window.innerWidth < 450) {
+                state.scale = window.innerWidth / 450;
+            } else {
+                state.scale = 1;
+            }
+            updateCanvasTransform();
+            centerCamera();
+        }
+
+        function centerCamera() {
+            // Camera fixed sizes
+            const width = 352; 
+            const height = 416; 
+            
+            // Find center of physical screen mapped to current canvas scale
+            const localCenterX = ((window.innerWidth / 2) - state.panX) / state.scale;
+            const localCenterY = ((window.innerHeight / 2) - state.panY) / state.scale;
+
+            const x = localCenterX - (width / 2);
+            const y = localCenterY - (height / 2);
+            
+            elements.cameraWrapper.style.left = `${x}px`;
+            elements.cameraWrapper.style.top = `${y}px`;
+            
+            // Reset transforms if it was dragged previously
+            elements.cameraWrapper.dataset.x = 0;
+            elements.cameraWrapper.dataset.y = 0;
+            elements.cameraWrapper.style.transform = `translate(0px, 0px)`;
+        }
+
+        initLayout();
+        initCamera();
+
+    </script>
+</body>
+</html>
